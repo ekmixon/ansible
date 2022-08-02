@@ -104,13 +104,13 @@ def _display_header(path, h1, h2, w1=10, w2=7):
 
 
 def _display_role(gr):
-    install_info = gr.install_info
-    version = None
-    if install_info:
+    if install_info := gr.install_info:
         version = install_info.get("version", None)
+    else:
+        version = None
     if not version:
         version = "(unknown version)"
-    display.display("- %s, %s" % (gr.name, version))
+    display.display(f"- {gr.name}, {version}")
 
 
 def _display_collection(collection, cwidth=10, vwidth=7, min_cwidth=10, min_vwidth=7):
@@ -308,10 +308,7 @@ class GalaxyCLI(CLI):
         delete_parser.set_defaults(func=self.execute_delete)
 
     def add_list_options(self, parser, parents=None):
-        galaxy_type = 'role'
-        if parser.metavar == 'COLLECTION_ACTION':
-            galaxy_type = 'collection'
-
+        galaxy_type = 'collection' if parser.metavar == 'COLLECTION_ACTION' else 'role'
         list_parser = parser.add_parser('list', parents=parents,
                                         help='Show the name and version of each {0} installed in the {0}s_path.'.format(galaxy_type))
 
@@ -392,9 +389,9 @@ class GalaxyCLI(CLI):
         args_kwargs = {}
         if galaxy_type == 'collection':
             args_kwargs['help'] = 'The collection(s) name or path/url to a tar.gz collection artifact. This is ' \
-                                  'mutually exclusive with --requirements-file.'
+                                          'mutually exclusive with --requirements-file.'
             ignore_errors_help = 'Ignore errors during installation and continue with the next specified ' \
-                                 'collection. This will not ignore dependency conflict errors.'
+                                         'collection. This will not ignore dependency conflict errors.'
         else:
             args_kwargs['help'] = 'Role name, URL or tar file'
             ignore_errors_help = 'Ignore errors and continue with the next specified role.'
@@ -471,18 +468,16 @@ class GalaxyCLI(CLI):
 
         def server_config_def(section, key, required):
             return {
-                'description': 'The %s of the %s Galaxy server' % (key, section),
-                'ini': [
-                    {
-                        'section': 'galaxy_server.%s' % section,
-                        'key': key,
-                    }
-                ],
+                'description': f'The {key} of the {section} Galaxy server',
+                'ini': [{'section': f'galaxy_server.{section}', 'key': key}],
                 'env': [
-                    {'name': 'ANSIBLE_GALAXY_SERVER_%s_%s' % (section.upper(), key.upper())},
+                    {
+                        'name': f'ANSIBLE_GALAXY_SERVER_{section.upper()}_{key.upper()}'
+                    }
                 ],
                 'required': required,
             }
+
 
         validate_certs_fallback = not context.CLIARGS['ignore_certs']
         galaxy_options = {}
@@ -497,7 +492,10 @@ class GalaxyCLI(CLI):
         for server_priority, server_key in enumerate(server_list, start=1):
             # Config definitions are looked up dynamically based on the C.GALAXY_SERVER_LIST entry. We look up the
             # section [galaxy_server.<server>] for the values url, username, password, and token.
-            config_dict = dict((k, server_config_def(server_key, k, req)) for k, req in SERVER_DEF)
+            config_dict = {
+                k: server_config_def(server_key, k, req) for k, req in SERVER_DEF
+            }
+
             defs = AnsibleLoader(yaml_dump(config_dict)).get_single_data()
             C.config.initialize_plugin_configuration_definitions('galaxy_server', server_key, defs)
 
@@ -648,7 +646,7 @@ class GalaxyCLI(CLI):
         def parse_role_req(requirement):
             if "include" not in requirement:
                 role = RoleRequirement.role_yaml_parse(requirement)
-                display.vvv("found role %s in yaml file" % to_text(role))
+                display.vvv(f"found role {to_text(role)} in yaml file")
                 if "name" not in role and "src" not in role:
                     raise AnsibleError("Must specify name or src for role")
                 return [GalaxyRole(self.galaxy, self.api, **role)]
@@ -663,8 +661,10 @@ class GalaxyCLI(CLI):
                         return [GalaxyRole(self.galaxy, self.api, **r) for r in
                                 (RoleRequirement.role_yaml_parse(i) for i in yaml_load(f_include))]
                     except Exception as e:
-                        raise AnsibleError("Unable to load data from include requirements file: %s %s"
-                                           % (to_native(requirements_file), to_native(e)))
+                        raise AnsibleError(
+                            f"Unable to load data from include requirements file: {to_native(requirements_file)} {to_native(e)}"
+                        )
+
 
         if isinstance(file_requirements, list):
             # Older format that contains only roles
@@ -677,7 +677,7 @@ class GalaxyCLI(CLI):
 
         else:
             # Newer format with a collections and/or roles key
-            extra_keys = set(file_requirements.keys()).difference(set(['roles', 'collections']))
+            extra_keys = set(file_requirements.keys()).difference({'roles', 'collections'})
             if extra_keys:
                 raise AnsibleError("Expecting only 'roles' and/or 'collections' as base keys in the requirements "
                                    "file. Found: %s" % (to_native(", ".join(extra_keys))))
@@ -739,7 +739,7 @@ class GalaxyCLI(CLI):
     @staticmethod
     def _display_role_info(role_info):
 
-        text = [u"", u"Role: %s" % to_text(role_info['name'])]
+        text = [u"", f"Role: {to_text(role_info['name'])}"]
 
         # Get the top-level 'description' first, falling back to galaxy_info['galaxy_info']['description'].
         galaxy_info = role_info.get('galaxy_info', {})
@@ -872,7 +872,10 @@ class GalaxyCLI(CLI):
         if not os.path.exists(b_output_path):
             os.makedirs(b_output_path)
         elif os.path.isfile(b_output_path):
-            raise AnsibleError("- the output collection directory %s is a file - aborting" % to_native(output_path))
+            raise AnsibleError(
+                f"- the output collection directory {to_native(output_path)} is a file - aborting"
+            )
+
 
         for collection_path in context.CLIARGS['args']:
             collection_path = GalaxyCLI._resolve_path(collection_path)
